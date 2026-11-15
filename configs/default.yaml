@@ -1,0 +1,211 @@
+# Neutral out-of-the-box configuration for speech-sieve.
+# Works immediately on CPU with zero GPU/neural weights; enable optional models below as needed.
+
+schema_version: 1
+preset_name: default
+
+# Operating mode:
+# - "scripted_reading": enables transcript alignment checks and acoustic self-repetition cross-checks.
+# - "spontaneous": skips transcript-alignment gates so unscripted speech is not falsely rejected.
+mode: scripted_reading
+
+audio:
+  target_sample_rate: 16000
+  # Set require_mono: true and allow_resample/allow_downmix: false for strict recording-spec enforcement.
+  require_mono: false
+  allow_resample: true
+  allow_downmix: true
+  strict_sample_rate: false
+  max_duration_s: 1800.0
+  near_full_scale_threshold: 0.999
+
+features:
+  frame_ms: 20.0
+  hop_ms: 10.0
+  spectral_frame_ms: 25.0
+  nfft: 2048
+  spectral_batch_frames: 2048
+  min_spectral_voice_frames: 50
+  spectral_bands:
+    noise_low_hz: 300.0
+    noise_high_hz: 7900.0
+    below_hz: 300.0
+    above_hz: 3000.0
+    peak_low_hz: 60.0
+    peak_high_hz: 1000.0
+  rhythm_depths_db: [12, 18, 24]
+  rhythm_dip_range_s: [0.12, 1.2]
+  rhythm_min_burst_s: 0.12
+  speech_level_window_s: 3.0
+  speech_level_min_voice_s: 1.5
+  speech_level_min_windows: 3
+
+repeat:
+  # Pure-NumPy multi-scale MFCC + subsequence DTW acoustic self-repetition detector.
+  enabled: true
+  frame_ms: 25.0
+  hop_ms: 10.0
+  nfft: 512
+  mel_bands: 40
+  mfcc_dimensions: 13
+  mel_low_hz: 60.0
+  mel_high_hz: 7600.0
+  feature_batch_frames: 4096
+  energy_absolute_dbfs: -65.0
+  energy_relative_db: -35.0
+  coarse_downsample: 4
+  coarse_stride_s: 0.12
+  seed_lengths_s: [0.48, 0.96, 1.92]
+  target_duration_ratios: [0.8, 1.0, 1.25]
+  descriptor_bins: 4
+  min_active_fraction: 0.65
+  min_temporal_variation: 0.025
+  coarse_retrieval_distance_cap: 0.45
+  coarse_block_rows: 128
+  neighbors_per_seed: 2
+  nonoverlap_gap_s: 0.08
+  max_dtw_pairs: 80
+  target_boundary_margin_s: 0.24
+  matched_duration_ratio: [0.67, 1.5]
+  dtw_mean_distance_cap: 0.22
+  good_frame_distance_cap: 0.35
+  min_good_path_fraction: 0.75
+  max_coarse_descriptors_per_scale: 6000
+  per_file_budget_s: 30.0
+  max_duration_s: 1800.0
+
+alignment:
+  # Set enabled: true after installing .[vad,align] to score transcript span coverage.
+  enabled: false
+  token_unit: auto
+  coverage_margins_s: [0.2, 0.5]
+  window_s: 5.0
+  window_step_s: 2.0
+  min_window_voice_s: 2.0
+  cross_coverages: [0.6, 0.8, 0.9]
+  cross_default_coverage: 0.8
+  cross_near_zero_fraction: 0.2
+  cross_min_voice_s: 0.2
+  cross_outside_hull_margin_s: 0.5
+
+topic_prefix:
+  # Compares opening clause against each record's optional `question` field.
+  # Add domain-specific opening phrases or filler tokens below if needed.
+  enabled: true
+  strip_question_prefixes: []
+  explicit_cues: []
+  fillers: ""
+  punctuation_split: "([\\n,!?.;:，。！？；：])"
+  min_lead_len: 5
+  min_fuzzy_len: 5
+  fuzzy_ratio_min: 0.65
+  near_start_max_tokens: 12
+  filler_max_tokens: 6
+
+models:
+  device: auto
+  vad:
+    # Install extras [vad] and set enabled: true to activate Silero VAD.
+    enabled: false
+    backend: silero
+    weight_path: null
+    threshold_on: 0.5
+    threshold_off: 0.35
+    min_silence_ms: 100.0
+    min_speech_ms: 32.0
+    batch_frame_samples: 512
+    batch_size: 32
+  aligner:
+    # Install extras [align] and set enabled: true to activate Qwen3-ForcedAligner-0.6B.
+    enabled: false
+    backend: qwen
+    weight_path: null
+    language: null
+    dtype: auto
+    attn_implementation: sdpa
+    min_duration_s: 0.0125
+    max_duration_s: 300.0
+    tiers:
+      - [9.0, 8]
+      - [30.0, 4]
+      - [300.0, 1]
+  overlap:
+    # Install extras [overlap] (requires HF token for pyannote/segmentation-3.0) and set enabled: true.
+    enabled: false
+    backend: pyannote
+    weight_path: null
+    window_s: 10.0
+    hop_s: 5.0
+    grid_step_ms: 10.0
+    probability_threshold: 0.5
+    batch_size: 16
+    row_chunk_size: 64
+
+gates:
+  audio_integrity:
+    enabled: true
+    severity: alert
+    maximum_clipping_fraction: 0.001
+    minimum_clipped_run_samples: 4
+  signal_level_low:
+    enabled: true
+    severity: alert
+    maximum_dbfs: -35.0
+  signal_level_variance:
+    enabled: true
+    severity: alert
+    minimum_db: 12.0
+  alignment_coverage_gap:
+    enabled: true
+    severity: alert
+    margin_s: 0.5
+    minimum_unexplained_voice_s: 10.0
+    minimum_unexplained_fraction: 0.2
+  acoustic_repetition:
+    enabled: true
+    severity: alert
+    coverage: 0.8
+    outside_hull_margin_s: 0.5
+  rhythm_cadence_profile:
+    # Kept as continuous descriptor by default; set enabled: true to route extreme pause rates for review.
+    enabled: false
+    severity: review_recommended
+    energy_depth_db: 18
+    minimum_extent_s: 5.0
+    minimum_dip_count: 4
+    minimum_dips_per_10s: 4.0
+    minimum_dip_fraction: 0.1
+    maximum_tokens_per_extent_s: 3.0
+  spectral_tilt_profile:
+    # Kept as continuous descriptor by default; set enabled: true to route muffled low-level audio for review.
+    enabled: false
+    severity: review_recommended
+    maximum_rolloff95_median_hz: 500.0
+    maximum_speech_rms_dbfs: -25.0
+    minimum_voice_frames: 50
+  overlap_risk:
+    enabled: true
+    severity: review_recommended
+    minimum_max_probability: 0.8
+  edge_truncation_risk:
+    enabled: true
+    severity: review_recommended
+    minimum_seconds: 5.0
+  excessive_silence:
+    enabled: true
+    severity: alert
+    maximum_vad_voice_s: 1.0
+    maximum_vad_voice_fraction: 0.05
+  non_speech_dominant:
+    enabled: true
+    severity: alert
+    minimum_vad_voice_s: 20.0
+    maximum_tokens_per_vad_s: 0.5
+  prompt_echo_prefix:
+    enabled: true
+    severity: review_recommended
+  advisory_cer:
+    # Reference-only telemetry when caller provides a `cer` field; never triggers rejection.
+    enabled: false
+    severity: advisory
+    note: "Advisory profiling only; avoid rejecting diverse speech solely by a single CER cutoff."

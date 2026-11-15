@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "speech-sieve"
+version = "0.1.0"
+description = "Modular speech corpus quality screening, acoustic self-repetition detection, and forced-alignment triage pipeline."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "numpy>=1.24",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+vad = [
+    "torch>=2.1",
+    "silero-vad>=5.1",
+]
+align = [
+    "torch>=2.1",
+    "transformers>=4.45",
+    "qwen-asr>=0.0.6",
+]
+overlap = [
+    "torch>=2.1",
+    "pyannote.audio>=3.1",
+]
+soundfile = [
+    "soundfile>=0.12",
+]
+
+[project.scripts]
+speech-sieve = "speech_sieve.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
